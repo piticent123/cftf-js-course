@@ -33,6 +33,8 @@ function testList(level) {
 
     let {level, test, all} = program;
     if (level || test) {
+        
+        const testFailed = await runJest(level, test);
         const {runMore} = await inquirer.prompt([{type: 'confirm', name: 'runMore', message: 'Run more tests?'}]);
         if (!runMore) return;
     }
@@ -41,8 +43,4 @@ function testList(level) {
         // TODO
         return;
     }
-
-    
-    const testFailed = await runJest(level, test);
-    console.log(`Test ${args.level}.${args.test} ${testFailed ? 'failed' : 'passed'}.`);
 })();
