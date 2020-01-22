@@ -4,13 +4,17 @@
   "description": "An education JS course",
   "main": "index.js",
   "scripts": {
-    "start": "jest --watch"
+    "start": "node tests/index.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "chalk": "^3.0.0",
-    "jest": "^25.1.0"
+    "clear": "^0.1.0",
+    "commander": "^4.1.0",
+    "inquirer": "^7.0.3",
+    "jest": "^25.1.0",
+    "spinnies": "^0.5.1"
   },
   "devDependencies": {
     "@types/jest": "^24.9.0"
