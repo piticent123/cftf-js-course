@@ -15,7 +15,17 @@ function csv(value) {
 }
 
 function testList(level) {
-    return fs.readdirSync(`tests/${levelFolders[level - 1]}`).map(name => name.replace('.test.js', ''));
+    return fs
+        .readdirSync(`tests/${typeof level === 'string' ? level : levelFolders[level - 1]}`)
+        .map(name => name.replace('.test.js', ''));
+}
+
+function getTestName(level, test) {
+    return fs
+        .readdirSync(`tests/${typeof level === 'string' ? level : levelFolders[level - 1]}`)
+        .find(name => name.includes(`${test} `))
+        .replace('.test.js', '')
+        .substring(3);
 }
 
 /**
@@ -25,13 +35,15 @@ function testList(level) {
  * @param {String[]} test 
  * @returns {String[][]}
  */
-function parseTestList(level, test) {
+function parseTestList({tests: {level = [], test = [], all} = {}, runType} = {}) {
     const testsToArray = (input, defaultLevel) => {
         const [, level = defaultLevel, test] = /(\d+)?[._@#-]?(\d+)/.exec(input);
         return level && test ? [level, test] : `I couldn't find a valid test in "${input}"`;
     };
 
-    if (level.length && !test.length) {
+    if (all || runType === 'Run All Tests') {
+        return levelFolders.flatMap(l => testList(l).map((_, t) => ([l, t])));
+    } else if (level.length && !test.length) {
         return level.flatMap(l => testList(l).map((_, t) => ([l, t])));
     } else if (test.length && !level.length) {
         return test.map(testsToArray);
@@ -42,8 +54,6 @@ function parseTestList(level, test) {
             console.log(`Ignoring levels ${level[1]} and ${level[2]}`);
         }
         return test.map(t => testsToArray(t, level[0]));
-    } else {
-        return "You didn't specify a test to run!";
     }
 }
 
@@ -57,7 +67,7 @@ function parseTestList(level, test) {
 function runJest(level, test) {
     return new Promise(resolve => {
         const jest = path.join('.', 'node_modules', '.bin', 'jest');
-        const testName = `${levelFolders[level - 1].substr(2)}#${test + 1}`;
+        const testName = `${typeof level === 'string' ? level : levelFolders[level - 1].substring(2)}#${getTestName(level, test)}`;
         const testFinished = exitCode => {
             if (exitCode) spinnies.fail(testName, {text: `Test ${testName} failed!`});
             else spinnies.succeed(testName, {text: `Test ${testName} passed!`});
@@ -72,8 +82,10 @@ function runJest(level, test) {
     });
 };
 
+
+
 (async function app() {
-    const args = program
+    program
         .version('1.0.0', '-v, --version')
         .option('-l, --level <level>', 'Level Difficulty', csv)
         .option('-t, --test <test>', 'Test', csv)
@@ -82,18 +94,41 @@ function runJest(level, test) {
     clear();
     console.log(`Welcome to the ${chalk.bgYellow.black.underline('Camp Fitch Tech Focus')} course for ${chalk.bgYellow.black.underline('Javascript')}!`)
 
-    let {level = [], test = [], all} = program;
-    if (all) level = levelFolders.map((_, i) => i + 1);
-    if (level.length || test.length) {
-        const tests = parseTestList(level, test);
-        await Promise.all(tests.map(([l, t]) => runJest(l, t)));
-        return;
-    }
+    let response = {tests: program, runMore: false};
+    while (true) {
+        const tests = parseTestList(response);
 
-    let response = {};
-    do {
-        // Ask for tests to run
-        // Run tests (TODO: Watch all tests, run changed ones)
-        response = await inquirer.prompt([{type: 'confirm', name: 'runMore', message: 'Run more tests?'}]);
-    } while (response.runMore);
+        if (tests) await Promise.all(tests.map(([l, t]) => runJest(l, t)));
+        if (tests && !response.runMore) return;
+        
+        response = await inquirer.prompt([
+            {
+                type: 'confirm',
+                name: 'runMore', 
+                message: 'Run more tests?',
+                when: tests !== undefined,
+            },
+            {
+                type: 'list', 
+                name: 'runType',
+                message: 'What do you want to run?',
+                choices: ['Run All Tests', 'Watch All Changed Tests', 'Run Specific Tests'],
+                when: ({runMore}) => runMore || runMore === undefined,
+            },
+            {
+                type: 'checkbox',
+                name: 'tests.test',
+                message: 'Which tests do you want to run?',
+                choices: ['Use Text Input', ...levelFolders.flatMap(l => testList(l).map(t => `${l.substring(2)}#${t.substring(3)}`))],
+                when: ({runType}) => runType === 'Run Specific Tests',
+            },
+            {
+                type: 'input',
+                name: 'tests.test', 
+                message: 'Which tests do you want to run?',
+                filter: x => x.split(','),
+                when: ({tests}) => tests && tests.test && tests.test[0] === 'Use Text Input',
+            }
+        ]);
+    }
 })();
